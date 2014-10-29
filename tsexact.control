@@ -1,0 +1,5 @@
+# tsexact extension
+comment = 'full text search exact match function'
+default_version = '1.0'
+module_pathname = '$libdir/tsexact'
+relocatable = true
