@@ -7,7 +7,7 @@
 --  PostgreSQL code for TSEXACT.
 --
 
-CREATE FUNCTION ts_exact_match(tsvector, tsquery)
+CREATE FUNCTION ts_exact_match(tsvector, tsvector)
 RETURNS bool
 AS 'MODULE_PATHNAME'
 LANGUAGE C IMMUTABLE STRICT;
