@@ -21,3 +21,8 @@ CREATE FUNCTION ts_squeeze(tsvector)
 RETURNS tsvector
 AS 'MODULE_PATHNAME'
 LANGUAGE C IMMUTABLE STRICT;
+
+CREATE FUNCTION setweight(tsquery, text)
+RETURNS tsquery
+AS 'MODULE_PATHNAME', 'setweight_tsquery'
+LANGUAGE C IMMUTABLE STRICT;

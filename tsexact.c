@@ -12,6 +12,8 @@ PG_FUNCTION_INFO_V1(ts_exact_match);
 Datum		ts_exact_match(PG_FUNCTION_ARGS);
 PG_FUNCTION_INFO_V1(ts_squeeze);
 Datum		ts_squeeze(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(setweight_tsquery);
+Datum		setweight_tsquery(PG_FUNCTION_ARGS);
 
 typedef struct
 {
@@ -83,10 +85,10 @@ operandInfoCmp(const void *a1, const void *a2)
 		return 1;
 }
 
-static uint16
+static uint8
 getWeightMask(text *weight)
 {
-	uint16	weightMask = 0;
+	uint8	weightMask = 0;
 	char   *w, *we;
 
 	weightMask = 0;
@@ -174,7 +176,7 @@ ts_exact_match(PG_FUNCTION_ARGS)
 	TSVector	query = PG_GETARG_TSVECTOR(1);
 	CHKVAL		chkval;
 	int 		i;
-	uint16		weightMask;
+	uint8		weightMask;
 	OperandInfo	*opInfo;
 	bool		notFound = false;
 
@@ -299,15 +301,11 @@ cmpPos(const void *a1, const void *a2)
 Datum
 ts_squeeze(PG_FUNCTION_ARGS)
 {
-	TSVector		val = PG_GETARG_TSVECTOR(0), copy;
+	TSVector		val = PG_GETARG_TSVECTOR_COPY(0);
 	WordEntry	   *we;
 	WordEntryPos  **pos;
 	int				i, j, k, len;
 	uint16			w, p, prev_p;
-
-	copy = (TSVector)palloc(VARSIZE(val));
-	memcpy(copy, val, VARSIZE(val));
-	val = copy;
 
 	we = ARRPTR(val);
 	len = 0;
@@ -348,4 +346,24 @@ ts_squeeze(PG_FUNCTION_ARGS)
 	}
 
 	PG_RETURN_TSVECTOR(val);
+}
+
+Datum
+setweight_tsquery(PG_FUNCTION_ARGS)
+{
+	TSQuery		query = PG_GETARG_TSQUERY_COPY(0);
+	uint8		weightMask;
+	QueryItem  *items;
+	int			i;
+
+	items = GETQUERY(query);
+	weightMask = getWeightMask(PG_GETARG_TEXT_PP(1));
+	for (i = 0; i < query->size; i++)
+	{
+		if (items[i].type == QI_VAL)
+		{
+			items[i].qoperand.weight = weightMask;
+		}
+	}
+	PG_RETURN_TSQUERY(query);
 }

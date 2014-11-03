@@ -13,3 +13,7 @@ SELECT ts_exact_match('a:1 b:2 c:2'::tsvector, 'a:1 b:2 c:2'::tsvector);
 
 SELECT ts_squeeze('a:1,6 b:2,9 c:4'::tsvector);
 SELECT ts_squeeze('a:2,10 b:5,6 c:8 d:12'::tsvector);
+
+SELECT setweight('a & b'::tsquery, 'A');
+SELECT setweight('a:A & (b:B | c:C)'::tsquery, 'CD');
+SELECT setweight('a:B | b:AD'::tsquery, '');

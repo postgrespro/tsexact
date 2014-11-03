@@ -65,3 +65,21 @@ SELECT ts_squeeze('a:2,10 b:5,6 c:8 d:12'::tsvector);
  'a':1,5 'b':2,3 'c':4 'd':6
 (1 row)
 
+SELECT setweight('a & b'::tsquery, 'A');
+   setweight   
+---------------
+ 'a':A & 'b':A
+(1 row)
+
+SELECT setweight('a:A & (b:B | c:C)'::tsquery, 'CD');
+          setweight           
+------------------------------
+ 'a':CD & ( 'b':CD | 'c':CD )
+(1 row)
+
+SELECT setweight('a:B | b:AD'::tsquery, '');
+ setweight 
+-----------
+ 'a' | 'b'
+(1 row)
+
