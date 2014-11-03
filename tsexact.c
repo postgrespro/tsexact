@@ -10,14 +10,14 @@ PG_MODULE_MAGIC;
 
 PG_FUNCTION_INFO_V1(ts_exact_match);
 Datum		ts_exact_match(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(ts_squeeze);
+Datum		ts_squeeze(PG_FUNCTION_ARGS);
 
 typedef struct
 {
 	WordEntry  *arrb;
 	WordEntry  *arre;
 	char	   *arrvalues;
-	WordEntry  *queryb;
-	WordEntry  *querye;
 	char	   *queryvalues;
 } CHKVAL;
 
@@ -65,9 +65,6 @@ typedef struct
 	int len, index;
 } OperandInfo;
 
-#define PREALLOC_SIZE 128
-
-
 TSVector cachedQuery = NULL;
 OperandInfo *cachedOpInfo = NULL;
 int	cachedOpInfoLen = 0;
@@ -86,6 +83,87 @@ operandInfoCmp(const void *a1, const void *a2)
 		return 1;
 }
 
+static uint16
+getWeightMask(text *weight)
+{
+	uint16	weightMask = 0;
+	char   *w, *we;
+
+	weightMask = 0;
+	w = VARDATA_ANY(weight);
+	we = w + VARSIZE_ANY_EXHDR(weight);
+
+	while (w < we)
+	{
+		switch (*w)
+		{
+		    case 'A':
+		    case 'a':
+		    	weightMask |= (1 << 3);
+		        break;
+		    case 'B':
+		    case 'b':
+		    	weightMask |= (1 << 2);
+		        break;
+		    case 'C':
+		    case 'c':
+		    	weightMask |= (1 << 1);
+		        break;
+		    case 'D':
+		    case 'd':
+		    	weightMask |= (1 << 0);
+		        break;
+		    default:
+		        /* internal error */
+		        elog(ERROR, "unrecognized weight: %d", *w);
+		}
+		w++;
+	}
+	return weightMask;
+}
+
+static void
+invalidateCache(TSVector query)
+{
+	int				len, i, j, k;
+	OperandInfo	   *opInfo;
+	WordEntry	   *we;
+
+	if (cachedQuery && VARSIZE_ANY(query) == VARSIZE_ANY(cachedQuery) &&
+			!memcmp(query, cachedQuery, VARSIZE_ANY(query)))
+		return;
+
+	if (cachedQuery)
+		free(cachedQuery);
+	if (cachedOpInfo)
+		free(cachedOpInfo);
+
+	cachedQuery = (TSVector)malloc(VARSIZE_ANY(query));
+	memcpy(cachedQuery, query, VARSIZE_ANY(query));
+
+	we = ARRPTR(cachedQuery);
+
+	cachedOpInfoLen = 0;
+	for (i = 0; i < cachedQuery->size; i++)
+		cachedOpInfoLen += POSDATALEN(cachedQuery, &we[i]);
+
+	k = 0;
+	opInfo = (OperandInfo *)malloc(sizeof(OperandInfo) * cachedOpInfoLen);
+	for (i = 0; i < cachedQuery->size; i++)
+	{
+		WordEntryPos *pos = POSDATAPTR(cachedQuery, &we[i]);
+		len = POSDATALEN(cachedQuery, &we[i]);
+		for (j = 0; j < len; j++)
+		{
+			opInfo[k].we = &we[i];
+			opInfo[k].index = WEP_GETPOS(*pos);
+			k++; pos++;
+		}
+	}
+	qsort(opInfo, cachedOpInfoLen, sizeof(OperandInfo), operandInfoCmp);
+	cachedOpInfo = opInfo;
+}
+
 /*
  * Checks if tsvector exactly matches tsquery
  */
@@ -95,56 +173,24 @@ ts_exact_match(PG_FUNCTION_ARGS)
 	TSVector	val = PG_GETARG_TSVECTOR(0);
 	TSVector	query = PG_GETARG_TSVECTOR(1);
 	CHKVAL		chkval;
-	int 		i, j, k;
+	int 		i;
+	uint16		weightMask;
 	OperandInfo	*opInfo;
+	bool		notFound = false;
+
+	if (PG_NARGS() >= 3)
+		weightMask = getWeightMask(PG_GETARG_TEXT_PP(2));
+	else
+		weightMask = 0xF;
+
+	invalidateCache(query);
 
 	chkval.arrb = ARRPTR(val);
 	chkval.arre = chkval.arrb + val->size;
 	chkval.arrvalues = STRPTR(val);
+	chkval.queryvalues = STRPTR(cachedQuery);
 
-	if (!cachedQuery || VARSIZE_ANY(query) != VARSIZE_ANY(cachedQuery) ||
-			memcmp(query, cachedQuery, VARSIZE_ANY(query)))
-	{
-		int len;
-
-		if (cachedQuery)
-			free(cachedQuery);
-		if (cachedOpInfo)
-			free(cachedOpInfo);
-		cachedQuery = (TSVector)malloc(VARSIZE_ANY(query));
-		memcpy(cachedQuery, query, VARSIZE_ANY(query));
-
-		chkval.queryb = ARRPTR(cachedQuery);
-		chkval.querye = chkval.queryb + cachedQuery->size;
-		chkval.queryvalues = STRPTR(cachedQuery);
-
-		cachedOpInfoLen = 0;
-		for (i = 0; i < cachedQuery->size; i++)
-			cachedOpInfoLen += POSDATALEN(cachedQuery, &chkval.queryb[i]);
-
-		k = 0;
-		opInfo = (OperandInfo *)malloc(sizeof(OperandInfo) * cachedOpInfoLen);
-		for (i = 0; i < cachedQuery->size; i++)
-		{
-			WordEntryPos *pos = POSDATAPTR(cachedQuery, &chkval.queryb[i]);
-			len = POSDATALEN(cachedQuery, &chkval.queryb[i]);
-			for (j = 0; j < len; j++)
-			{
-				opInfo[k].we = &chkval.queryb[i];
-				opInfo[k].index = WEP_GETPOS(*pos);
-				k++; pos++;
-			}
-		}
-		qsort(opInfo, cachedOpInfoLen, sizeof(OperandInfo), operandInfoCmp);
-		cachedOpInfo = opInfo;
-	}
-	else
-	{
-		opInfo = cachedOpInfo;
-		chkval.queryb = ARRPTR(cachedQuery);
-		chkval.querye = chkval.queryb + cachedQuery->size;
-		chkval.queryvalues = STRPTR(cachedQuery);
-	}
+	opInfo = cachedOpInfo;
 
 	for (i = 0; i < cachedOpInfoLen; i++)
 	{
@@ -152,15 +198,33 @@ ts_exact_match(PG_FUNCTION_ARGS)
 		we = checkcondition_str(&chkval, opInfo[i].we);
 		if (!we)
 		{
-			PG_RETURN_BOOL(false);
+			if (i == 0 || opInfo[i].index != opInfo[i - 1].index)
+				notFound = true;
+			if (notFound && (i == cachedOpInfoLen - 1 || opInfo[i].index != opInfo[i + 1].index))
+				PG_RETURN_BOOL(false);
+			opInfo[i].pos = NULL;
+			opInfo[i].len = 0;
 		}
-		opInfo[i].pos = POSDATAPTR(val, we);
-		opInfo[i].len = POSDATALEN(val, we);
+		else
+		{
+			notFound = false;
+			opInfo[i].pos = POSDATAPTR(val, we);
+			opInfo[i].len = POSDATALEN(val, we);
+		}
 	}
 
 	while (opInfo[0].len > 0)
 	{
+		bool finished = false;
 		int pos = (int)(*opInfo[0].pos) - opInfo[0].index;
+
+		if (!(weightMask & (1 << WEP_GETWEIGHT(pos))))
+		{
+			opInfo[0].pos++;
+			opInfo[0].len--;
+			continue;
+		}
+
 		for (i = 0; i < cachedOpInfoLen; i++)
 		{
 			while (opInfo[i].len > 0 && (int)(*opInfo[i].pos) < pos + opInfo[i].index)
@@ -170,10 +234,28 @@ ts_exact_match(PG_FUNCTION_ARGS)
 			}
 			if (opInfo[i].len <= 0)
 			{
-				PG_RETURN_BOOL(false);
+				if (i == 0 || opInfo[i].index != opInfo[i - 1].index)
+					finished = true;
+				if (finished && (i == cachedOpInfoLen - 1 || opInfo[i].index != opInfo[i + 1].index))
+					PG_RETURN_BOOL(false);
+				continue;
+			}
+			else
+			{
+				finished = false;
 			}
 			if ((int)*opInfo[i].pos > pos + opInfo[i].index)
-				break;
+			{
+				if (i < cachedOpInfoLen - 1 && opInfo[i].index == opInfo[i + 1].index)
+					continue;
+				else
+					break;
+			}
+			else
+			{
+				while (i < cachedOpInfoLen - 1 && opInfo[i].index == opInfo[i + 1].index)
+					i++;
+			}
 		}
 		if (i == cachedOpInfoLen)
 		{
@@ -184,4 +266,86 @@ ts_exact_match(PG_FUNCTION_ARGS)
 	}
 
 	PG_RETURN_BOOL(false);
+}
+
+static int
+cmpPos(const void *a1, const void *a2)
+{
+	const WordEntryPos **pos1, **pos2;
+	uint16 w1, w2, p1, p2;
+
+	pos1 = (const WordEntryPos **)a1;
+	pos2 = (const WordEntryPos **)a2;
+
+	w1 = WEP_GETWEIGHT(**pos1);
+	w2 = WEP_GETWEIGHT(**pos2);
+
+	if (w1 < w2)
+		return -1;
+	else if (w1 > w2)
+		return 1;
+
+	p1 = WEP_GETPOS(**pos1);
+	p2 = WEP_GETPOS(**pos2);
+
+	if (p1 < p2)
+		return -1;
+	else if (p1 == p2)
+		return 0;
+	else
+		return 1;
+}
+
+Datum
+ts_squeeze(PG_FUNCTION_ARGS)
+{
+	TSVector		val = PG_GETARG_TSVECTOR(0), copy;
+	WordEntry	   *we;
+	WordEntryPos  **pos;
+	int				i, j, k, len;
+	uint16			w, p, prev_p;
+
+	copy = (TSVector)palloc(VARSIZE(val));
+	memcpy(copy, val, VARSIZE(val));
+	val = copy;
+
+	we = ARRPTR(val);
+	len = 0;
+	for (i = 0; i < val->size; i++)
+		len += POSDATALEN(val, &we[i]);
+
+	pos = (WordEntryPos **)palloc(sizeof(WordEntryPos *) * len);
+	k = 0;
+	for (i = 0; i < val->size; i++)
+	{
+		for (j = 0; j < POSDATALEN(val, &we[i]); j++)
+		{
+			pos[k] = POSDATAPTR(val, &we[i]) + j;
+			k++;
+		}
+	}
+
+	qsort(pos, len, sizeof(WordEntryPos *), cmpPos);
+
+	w = 4; p = 1, prev_p = 1;
+	for (i = 0; i < len; i++)
+	{
+		if (WEP_GETWEIGHT(*pos[i]) != w)
+		{
+			p = 1;
+			w = WEP_GETWEIGHT(*pos[i]);
+			prev_p = WEP_GETPOS(*pos[i]);
+		}
+		else
+		{
+			if (WEP_GETPOS(*pos[i]) > prev_p)
+			{
+				p++;
+				prev_p = WEP_GETPOS(*pos[i]);
+			}
+		}
+		WEP_SETPOS(*pos[i], p);
+	}
+
+	PG_RETURN_TSVECTOR(val);
 }
