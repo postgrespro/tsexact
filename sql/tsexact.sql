@@ -10,6 +10,9 @@ SELECT ts_exact_match('a:1 b:2'::tsvector, 'a:1 b:2 c:2'::tsvector);
 SELECT ts_exact_match('a:1 c:2'::tsvector, 'a:1 b:2 c:2'::tsvector);
 SELECT ts_exact_match('a:1 d:2'::tsvector, 'a:1 b:2 c:2'::tsvector);
 SELECT ts_exact_match('a:1 b:2 c:2'::tsvector, 'a:1 b:2 c:2'::tsvector);
+SELECT ts_exact_match(''::tsvector, ''::tsvector);
+SELECT ts_exact_match('a:1'::tsvector, ''::tsvector);
+SELECT ts_exact_match(''::tsvector, 'a:1'::tsvector);
 
 SELECT ts_squeeze('a:1,6 b:2,9 c:4'::tsvector);
 SELECT ts_squeeze('a:2,10 b:5,6 c:8 d:12'::tsvector);

@@ -53,6 +53,24 @@ SELECT ts_exact_match('a:1 b:2 c:2'::tsvector, 'a:1 b:2 c:2'::tsvector);
  t
 (1 row)
 
+SELECT ts_exact_match(''::tsvector, ''::tsvector);
+ ts_exact_match 
+----------------
+ t
+(1 row)
+
+SELECT ts_exact_match('a:1'::tsvector, ''::tsvector);
+ ts_exact_match 
+----------------
+ t
+(1 row)
+
+SELECT ts_exact_match(''::tsvector, 'a:1'::tsvector);
+ ts_exact_match 
+----------------
+ f
+(1 row)
+
 SELECT ts_squeeze('a:1,6 b:2,9 c:4'::tsvector);
       ts_squeeze       
 -----------------------

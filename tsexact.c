@@ -187,6 +187,9 @@ ts_exact_match(PG_FUNCTION_ARGS)
 
 	invalidateCache(query);
 
+	if (cachedOpInfoLen == 0)
+		PG_RETURN_BOOL(true);
+
 	chkval.arrb = ARRPTR(val);
 	chkval.arre = chkval.arrb + val->size;
 	chkval.arrvalues = STRPTR(val);
