@@ -1,7 +1,7 @@
 # tsexact/Makefile
 
 MODULE_big = tsexact
-OBJS = tsexact.o tsheadline.o
+OBJS = tsexact.o
 EXTENSION = tsexact
 DATA = tsexact--1.0.sql
 REGRESS = tsexact
