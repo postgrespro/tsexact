@@ -26,3 +26,8 @@ CREATE FUNCTION setweight(tsquery, text)
 RETURNS tsquery
 AS 'MODULE_PATHNAME', 'setweight_tsquery'
 LANGUAGE C IMMUTABLE STRICT;
+
+CREATE FUNCTION poslen(tsvector)
+RETURNS int
+AS 'MODULE_PATHNAME', 'poslen'
+LANGUAGE C IMMUTABLE STRICT;

@@ -2,6 +2,7 @@
 
 #include "c.h"
 #include "fmgr.h"
+#include "tsearch/ts_cache.h"
 #include "tsearch/ts_type.h"
 #include "tsearch/ts_utils.h"
 #include "utils/memutils.h"
@@ -14,6 +15,9 @@ PG_FUNCTION_INFO_V1(ts_squeeze);
 Datum		ts_squeeze(PG_FUNCTION_ARGS);
 PG_FUNCTION_INFO_V1(setweight_tsquery);
 Datum		setweight_tsquery(PG_FUNCTION_ARGS);
+PG_FUNCTION_INFO_V1(poslen);
+Datum		poslen(PG_FUNCTION_ARGS);
+
 
 typedef struct
 {
@@ -349,6 +353,21 @@ ts_squeeze(PG_FUNCTION_ARGS)
 	}
 
 	PG_RETURN_TSVECTOR(val);
+}
+
+Datum
+poslen(PG_FUNCTION_ARGS)
+{
+	TSVector		val = PG_GETARG_TSVECTOR(0);
+	WordEntry	   *we;
+	int				i, len;
+
+	we = ARRPTR(val);
+	len = 0;
+	for (i = 0; i < val->size; i++)
+		len += POSDATALEN(val, &we[i]);
+
+	PG_RETURN_INT32(len);
 }
 
 Datum
