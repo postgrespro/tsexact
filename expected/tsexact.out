@@ -71,6 +71,36 @@ SELECT ts_exact_match(''::tsvector, 'a:1'::tsvector);
  f
 (1 row)
 
+SELECT ts_exact_match('a:2A b:3B c:5C'::tsvector, 'a:1 b:2 c:4'::tsvector, 'ABC');
+ ts_exact_match 
+----------------
+ t
+(1 row)
+
+SELECT ts_exact_match('a:2A b:3B c:5'::tsvector, 'a:1 b:2 c:4'::tsvector, 'ABC');
+ ts_exact_match 
+----------------
+ f
+(1 row)
+
+SELECT ts_exact_match('a:2 b:3 c:5'::tsvector, 'a:1A b:2B c:4C'::tsvector, 'D');
+ ts_exact_match 
+----------------
+ t
+(1 row)
+
+SELECT ts_exact_match('a:1A,4C b:2B,5 c:3A,6C'::tsvector, 'a:1A b:2B c:3C'::tsvector, 'CD');
+ ts_exact_match 
+----------------
+ t
+(1 row)
+
+SELECT ts_exact_match('a:1A,4C b:2C,5 c:3A,6B'::tsvector, 'a:1A b:2B c:3C'::tsvector, 'CD');
+ ts_exact_match 
+----------------
+ f
+(1 row)
+
 SELECT ts_squeeze('a:1,6 b:2,9 c:4'::tsvector);
       ts_squeeze       
 -----------------------
@@ -81,6 +111,12 @@ SELECT ts_squeeze('a:2,10 b:5,6 c:8 d:12'::tsvector);
          ts_squeeze          
 -----------------------------
  'a':1,5 'b':2,3 'c':4 'd':6
+(1 row)
+
+SELECT ts_squeeze('a:2A,10 b:5B,6C c:8 d:12A'::tsvector);
+           ts_squeeze            
+---------------------------------
+ 'a':1A,5 'b':2B,3C 'c':4 'd':6A
 (1 row)
 
 SELECT setweight('a & b'::tsquery, 'A');
@@ -99,5 +135,23 @@ SELECT setweight('a:B | b:AD'::tsquery, '');
  setweight 
 -----------
  'a' | 'b'
+(1 row)
+
+SELECT poslen('a:1 b:2'::tsvector);
+ poslen 
+--------
+      2
+(1 row)
+
+SELECT poslen('a:2A,10 b:5B,6C c:8 d:12A'::tsvector);
+ poslen 
+--------
+      6
+(1 row)
+
+SELECT poslen('a:1,2,6,7,8 b:3,4,5,9,10'::tsvector);
+ poslen 
+--------
+     10
 (1 row)
 

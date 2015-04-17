@@ -89,6 +89,9 @@ operandInfoCmp(const void *a1, const void *a2)
 		return 1;
 }
 
+/*
+ * Convert weight mask into binary representation
+ */
 static uint8
 getWeightMask(text *weight)
 {
@@ -128,6 +131,9 @@ getWeightMask(text *weight)
 	return weightMask;
 }
 
+/*
+ * Invalidate cache of query tsvector
+ */
 static void
 invalidateCache(TSVector query)
 {
@@ -171,7 +177,7 @@ invalidateCache(TSVector query)
 }
 
 /*
- * Checks if tsvector exactly matches tsquery
+ * Checks if tsvector contains another tsvector
  */
 Datum
 ts_exact_match(PG_FUNCTION_ARGS)
@@ -193,6 +199,8 @@ ts_exact_match(PG_FUNCTION_ARGS)
 
 	if (cachedOpInfoLen == 0)
 		PG_RETURN_BOOL(true);
+
+	/* Find all lexemes of query tsvector */
 
 	chkval.arrb = ARRPTR(val);
 	chkval.arre = chkval.arrb + val->size;
@@ -222,12 +230,14 @@ ts_exact_match(PG_FUNCTION_ARGS)
 		}
 	}
 
+	/* Check lexemes have same order as in query */
+
 	while (opInfo[0].len > 0)
 	{
-		bool finished = false;
-		int pos = (int)(*opInfo[0].pos) - opInfo[0].index;
+		int offset = WEP_GETPOS(*opInfo[0].pos) - opInfo[0].index;
+		notFound = false;
 
-		if (!(weightMask & (1 << WEP_GETWEIGHT(pos))))
+		if (!(weightMask & (1 << WEP_GETWEIGHT(*opInfo[0].pos))))
 		{
 			opInfo[0].pos++;
 			opInfo[0].len--;
@@ -236,25 +246,29 @@ ts_exact_match(PG_FUNCTION_ARGS)
 
 		for (i = 0; i < cachedOpInfoLen; i++)
 		{
-			while (opInfo[i].len > 0 && (int)(*opInfo[i].pos) < pos + opInfo[i].index)
+			while (opInfo[i].len > 0 && WEP_GETPOS(*opInfo[i].pos) < offset + opInfo[i].index)
 			{
 				opInfo[i].pos++;
 				opInfo[i].len--;
 			}
+
 			if (opInfo[i].len <= 0)
 			{
+				/* No more WEPs */
 				if (i == 0 || opInfo[i].index != opInfo[i - 1].index)
-					finished = true;
-				if (finished && (i == cachedOpInfoLen - 1 || opInfo[i].index != opInfo[i + 1].index))
+					notFound = true;
+				if (notFound && (i == cachedOpInfoLen - 1 || opInfo[i].index != opInfo[i + 1].index))
 					PG_RETURN_BOOL(false);
 				continue;
 			}
 			else
 			{
-				finished = false;
+				notFound = false;
 			}
-			if ((int)*opInfo[i].pos > pos + opInfo[i].index)
+
+			if (WEP_GETPOS(*opInfo[i].pos) > offset + opInfo[i].index || !(weightMask & (1 << WEP_GETWEIGHT(*opInfo[i].pos))))
 			{
+				/* No match */
 				if (i < cachedOpInfoLen - 1 && opInfo[i].index == opInfo[i + 1].index)
 					continue;
 				else
@@ -262,14 +276,17 @@ ts_exact_match(PG_FUNCTION_ARGS)
 			}
 			else
 			{
+				/* Match: skip same offsets*/
 				while (i < cachedOpInfoLen - 1 && opInfo[i].index == opInfo[i + 1].index)
 					i++;
 			}
 		}
+
 		if (i == cachedOpInfoLen)
 		{
 			PG_RETURN_BOOL(true);
 		}
+
 		opInfo[0].pos++;
 		opInfo[0].len--;
 	}
@@ -277,6 +294,9 @@ ts_exact_match(PG_FUNCTION_ARGS)
 	PG_RETURN_BOOL(false);
 }
 
+/*
+ * Compare WEPs: position first, weight second.
+ */
 static int
 cmpPos(const void *a1, const void *a2)
 {
@@ -286,39 +306,53 @@ cmpPos(const void *a1, const void *a2)
 	pos1 = (const WordEntryPos **)a1;
 	pos2 = (const WordEntryPos **)a2;
 
-	w1 = WEP_GETWEIGHT(**pos1);
-	w2 = WEP_GETWEIGHT(**pos2);
-
-	if (w1 < w2)
-		return -1;
-	else if (w1 > w2)
-		return 1;
-
 	p1 = WEP_GETPOS(**pos1);
 	p2 = WEP_GETPOS(**pos2);
 
 	if (p1 < p2)
 		return -1;
-	else if (p1 == p2)
+	else if (p1 > p2)
+		return 1;
+
+	w1 = WEP_GETWEIGHT(**pos1);
+	w2 = WEP_GETWEIGHT(**pos2);
+
+	if (w1 < w2)
+		return -1;
+	else if (w1 == w2)
 		return 0;
 	else
 		return 1;
 }
 
+/*
+ * Calculate total length of positions
+ */
+static int
+getTotalPosLen(TSVector val)
+{
+	int			i, len = 0;
+	WordEntry  *we = ARRPTR(val);
+
+	for (i = 0; i < val->size; i++)
+		len += POSDATALEN(val, &we[i]);
+
+	return len;
+}
+
+/*
+ * Remove unused offsets from tsvector
+ */
 Datum
 ts_squeeze(PG_FUNCTION_ARGS)
 {
 	TSVector		val = PG_GETARG_TSVECTOR_COPY(0);
-	WordEntry	   *we;
+	WordEntry	   *we = ARRPTR(val);
 	WordEntryPos  **pos;
-	int				i, j, k, len;
-	uint16			w, p, prev_p;
+	int				i, j, k, len = getTotalPosLen(val);
+	uint16			p, prev_p;
 
-	we = ARRPTR(val);
-	len = 0;
-	for (i = 0; i < val->size; i++)
-		len += POSDATALEN(val, &we[i]);
-
+	/* Put pointers to all WEPs into single array */
 	pos = (WordEntryPos **)palloc(sizeof(WordEntryPos *) * len);
 	k = 0;
 	for (i = 0; i < val->size; i++)
@@ -330,24 +364,17 @@ ts_squeeze(PG_FUNCTION_ARGS)
 		}
 	}
 
+	/* Sort WEPs */
 	qsort(pos, len, sizeof(WordEntryPos *), cmpPos);
 
-	w = 4; p = 1, prev_p = 1;
+	/* Make positions ascending with step 1 */
+	p = 0; prev_p = 0;
 	for (i = 0; i < len; i++)
 	{
-		if (WEP_GETWEIGHT(*pos[i]) != w)
+		if (WEP_GETPOS(*pos[i]) > prev_p)
 		{
-			p = 1;
-			w = WEP_GETWEIGHT(*pos[i]);
+			p++;
 			prev_p = WEP_GETPOS(*pos[i]);
-		}
-		else
-		{
-			if (WEP_GETPOS(*pos[i]) > prev_p)
-			{
-				p++;
-				prev_p = WEP_GETPOS(*pos[i]);
-			}
 		}
 		WEP_SETPOS(*pos[i], p);
 	}
@@ -355,21 +382,20 @@ ts_squeeze(PG_FUNCTION_ARGS)
 	PG_RETURN_TSVECTOR(val);
 }
 
+/*
+ * SQL-visible function for calculate total length of positions
+ */
 Datum
 poslen(PG_FUNCTION_ARGS)
 {
 	TSVector		val = PG_GETARG_TSVECTOR(0);
-	WordEntry	   *we;
-	int				i, len;
 
-	we = ARRPTR(val);
-	len = 0;
-	for (i = 0; i < val->size; i++)
-		len += POSDATALEN(val, &we[i]);
-
-	PG_RETURN_INT32(len);
+	PG_RETURN_INT32(getTotalPosLen(val));
 }
 
+/*
+ * Set same weights for all lexemes in tsquery
+ */
 Datum
 setweight_tsquery(PG_FUNCTION_ARGS)
 {
