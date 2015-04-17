@@ -57,13 +57,13 @@ TSExact offers various helper functions which are listed in the table below. In 
 
 `ts_exact_match(tsvector, tsvector)` function checks if given fragment appears in given document at some offset.
 
-    SELECT ts_exact_match('a:2 b:3 c:4'::tsvector, 'a:1 b:2 c:4'::tsvector);
+    # SELECT ts_exact_match('cat:3 fat:2 sad:4'::tsvector, 'cat:2 fat:1 sad:4'::tsvector);
      ts_exact_match 
     ----------------
      f
     (1 row)
 
-    SELECT ts_exact_match('a:2 b:3 c:5'::tsvector, 'a:1 b:2 c:4'::tsvector);
+    # SELECT ts_exact_match('cat:3 fat:2 sad:5'::tsvector, 'cat:2 fat:1 sad:4'::tsvector);
      ts_exact_match 
     ----------------
      t
@@ -71,13 +71,13 @@ TSExact offers various helper functions which are listed in the table below. In 
 
 `ts_exact_match(tsvector, tsvector)` ignores lexemes weights. `ts_exact_match(tsvector, tsvector, text)` only finds fragments in given weight of document. Weights of fragment are always ignored.
 
-    SELECT ts_exact_match('a:2 b:3 c:4'::tsvector, 'a:1 b:2 c:4'::tsvector, 'ABC');
+    # SELECT ts_exact_match('cat:3 fat:2 sad:5'::tsvector, 'cat:2 fat:1 sad:4'::tsvector, 'ABC');
      ts_exact_match 
     ----------------
      f
     (1 row)
 
-    SELECT ts_exact_match('a:2A b:3B c:5C'::tsvector, 'a:1 b:2 c:4'::tsvector, 'ABC');
+    # SELECT ts_exact_match('cat:3A fat:2B sad:5C'::tsvector, 'cat:2 fat:1 sad:4'::tsvector, 'ABC');
      ts_exact_match 
     ----------------
      t
@@ -85,26 +85,26 @@ TSExact offers various helper functions which are listed in the table below. In 
 
 Since tsvectors could contain gaps in position numbering it's suitable to remove gaps using `ts_squeeze(tsvector)`.
 
-    SELECT ts_squeeze('a:1,6 b:2,9 c:4'::tsvector);
-          ts_squeeze       
-    -----------------------
-     'a':1,4 'b':2,5 'c':3
+    # SELECT ts_squeeze('cat:2,9 fat:1,6 sad:4'::tsvector);
+             ts_squeeze
+    -----------------------------
+     'cat':2,5 'fat':1,4 'sad':3
     (1 row)
 
 Fulltext search indexes doesn't support `ts_exact_match()` functions. Thus it's useful to combine `ts_exact_match()` with `tsvector @@ tsquery` expression in order to use indexed search.
 
 `setweight(tsquery, text)` assigns given weight to each lexeme of tsquery.
 
-    SELECT setweight('a:A & (b:B | c:C)'::tsquery, 'CD');
-              setweight           
-    ------------------------------
-     'a':CD & ( 'b':CD | 'c':CD )
+    # SELECT setweight('fat:A & (cat:B | rat:C)'::tsquery, 'CD');
+                 setweight
+    ------------------------------------
+     'fat':CD & ( 'cat':CD | 'rat':CD )
     (1 row)
 
 `poslen(tsvector)` returns total number of lexeme positions in tsvector.
 
-    SELECT poslen('a:1,2,6,7,8 b:3,4,5,9,10'::tsvector);
-     poslen 
+    # SELECT poslen('cat:3,4,5,9,10 fat:1,2,6,7,8'::tsvector);
+     poslen
     --------
          10
     (1 row)
