@@ -91,7 +91,24 @@ Since tsvectors could contain gaps in position numbering it's suitable to remove
      'cat':2,5 'fat':1,4 'sad':3
     (1 row)
 
-Fulltext search indexes doesn't support `ts_exact_match()` functions. Thus it's useful to combine `ts_exact_match()` with `tsvector @@ tsquery` expression in order to use indexed search.
+Fulltext search indexes doesn't support `ts_exact_match()` functions. Thus, it's useful to combine `ts_exact_match()` with `tsvector @@ tsquery` expression in order to use indexed search. Therefore, complete example of phrase search may be following.
+
+    -- Calculate tsvector using ts_squeeze() function in order to remove gaps in
+    -- lexemes offsets.
+    UPDATE tt SET ti =
+        ts_squeeze(
+            setweight(to_tsvector(coalesce(title,'')), 'A')    ||
+            setweight(to_tsvector(coalesce(keyword,'')), 'B')  ||
+            setweight(to_tsvector(coalesce(abstract,'')), 'C') ||
+            setweight(to_tsvector(coalesce(body,'')), 'D'));
+    
+    -- Search for phrase. "tsvector @@ tsquery" operator is used for phrase search,
+    -- ts_exact_match() function is used to recheck an exact phrase match.
+    SELECT *
+    FROM tt
+    WHERE tt.ti @@ plainto_tsquery('fat rat') AND
+          ts_exact_match(tt.ti, ts_squeeze(to_tsvector('fat rat')));
+
 
 `setweight(tsquery, text)` assigns given weight to each lexeme of tsquery.
 
