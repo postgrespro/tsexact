@@ -18,7 +18,7 @@ Availability
 
 TSExact is released as an extension and not available in default PostgreSQL
 installation. It is available from
-[github](https://github.com/akorotkov/tsexact)
+[github](https://github.com/postgrespro/tsexact)
 under the same license as
 [PostgreSQL](http://www.postgresql.org/about/licence/)
 and supports PostgreSQL 9.0+.
@@ -35,7 +35,7 @@ Before build and install TSExact you should ensure following:
     
 Typical installation procedure may look like this:
     
-    $ git clone https://github.com/akorotkov/tsexact.git
+    $ git clone https://github.com/postgrespro/tsexact.git
     $ cd tsexact
     $ make USE_PGXS=1
     $ sudo make USE_PGXS=1 install
