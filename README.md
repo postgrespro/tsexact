@@ -49,8 +49,8 @@ TSExact offers various helper functions which are listed in the table below. In 
 
 |          Function                                                 | Return type |                      Description                           |
 | ----------------------------------------------------------------- | ----------- | ---------------------------------------------------------- |
-| ts_exact_match(document tsvector, flagment tsvector)              | bool        | Check if given fragment is present in document             |
-| ts_exact_match(document tsvector, flagment tsvector, weight text) | bool        | Check if given fragment is present in document with weight |
+| ts_exact_match(document tsvector, fragment tsvector)              | bool        | Check if given fragment is present in document             |
+| ts_exact_match(document tsvector, fragment tsvector, weight text) | bool        | Check if given fragment is present in document with weight |
 | ts_squeeze(document tsvector)                                     | tsvector    | Remove empty positions from document                       |
 | setweight(query tsquery, weight text)                             | tsquery     | Assign weight for each lexeme in tsquery                   |
 | poslen(documents tsvector)                                        | integer     | Return total number of positions in document               |
