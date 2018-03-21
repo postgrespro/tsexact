@@ -5,7 +5,9 @@ Introduction
 ------------
 
 TSExact – is a PostgreSQL extension with various helper function for fulltext
-search. 
+search.  Basically TSExact contains functions which emulate phrase search on
+PostgreSQL versions 9.5 and lower.  If you're using PostgreSQL 9.6 and higher
+you should consider using builtin phrase search rather than TSExact.
 
 
 Authors
